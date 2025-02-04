@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Math Drawing Board</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">Math Drawing Board</h1>
+        
+        <!-- Tools Container -->
+        <div class="flex justify-between items-center mb-4">
+            <div class="flex space-x-2" id="color-swatches">
+                <!-- Color swatches will be added here -->
+            </div>
+            <div class="flex space-x-4">
+                <button onclick="resetCanvas()" class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                    Clear Canvas
+                </button>
+                <button onclick="calculateExpression()" class="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                    Calculate
+                </button>
+            </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="relative">
+            <canvas id="canvas" class="w-full h-[500px] bg-white rounded-lg shadow-md border border-gray-200"></canvas>
+        </div>
+
+        <!-- Results Container -->
+        <div id="latex-container" class="mt-4 p-4 bg-white rounded-lg shadow-md"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let color = 'black';
+        let dictOfVars = {};
+
+        // Set canvas size
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            ctx.lineCap = "round";
+            ctx.lineWidth = 3;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Drawing functions
+        function startDrawing(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            ctx.strokeStyle = color;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Canvas event listeners
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        // Reset canvas
+        function resetCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('latex-container').innerHTML = '';
+            dictOfVars = {};
+        }
+
+        // Calculate expression
+        async function calculateExpression() {
+            // Convert canvas to base64
+            const imageData = canvas.toDataURL('image/png');
+            
+            try {
+                const response = await fetch('/calculate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        image: imageData,
+                        dict_of_vars: dictOfVars
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.data && result.data.length > 0) {
+                    const latexContainer = document.getElementById('latex-container');
+                    latexContainer.innerHTML = '';
+                    
+                    result.data.forEach(item => {
+                        if (item.assign) {
+                            dictOfVars[item.expr] = item.result;
+                        }
+                        const resultDiv = document.createElement('div');
+                        resultDiv.className = 'p-2 mb-2 bg-gray-100 rounded';
+                        resultDiv.innerHTML = `\\[${item.expr} = ${item.result}\\]`;
+                        latexContainer.appendChild(resultDiv);
+                    });
+
+                    if (window.MathJax) {
+                        MathJax.Hub.Queue(['Typeset', MathJax.Hub, latexContainer]);
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error calculating expression');
+            }
+        }
+
+        // Initialize color swatches
+        document.addEventListener('DOMContentLoaded', function() {
+            const colors = ['black', 'blue', 'red', 'green', 'yellow', 'white'];
+            const colorContainer = document.getElementById('color-swatches');
+            
+            colors.forEach(colorValue => {
+                const btn = document.createElement('button');
+                btn.className = `w-8 h-8 rounded-full border border-gray-300 ${colorValue === 'white' ? 'bg-white' : ''} transition-transform hover:scale-110`;
+                btn.style.backgroundColor = colorValue;
+                btn.onclick = () => {
+                    color = colorValue;
+                    document.querySelectorAll('#color-swatches button').forEach(b => 
+                        b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500'));
+                    btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+                };
+                colorContainer.appendChild(btn);
+            });
+
+            // Set initial active color
+            colorContainer.firstChild.click();
+        });
+    </script>
+</body>
+</html>
+
